@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Script Runner</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Python Script Runner</h1>
+        <form id="script-form" class="mb-4">
+            <div class="form-group">
+                <label for="script-select">Select a Script:</label>
+                <select id="script-select" name="script" class="form-control" onchange="showOptions()">
+                    <option value="">--Select--</option>
+                    <option value="zip_converter">Zip Converter</option>
+                    <option value="data_profiling">Data Profiling</option>
+                    <option value="reporting">Reporting</option>
+                    <option value="file_renaming_ordering">File Renaming and Ordering</option>
+                    <!-- Add more options as needed -->
+                </select>
+            </div>
+            <div id="script-options">
+                <!-- Options will be populated here based on the selected script -->
+            </div>
+            <div id="run-script-container">
+                <!-- Run Script button will be conditionally added here -->
+            </div>
+        </form>
+        <div id="result"></div>
+    </div>
+    <script>
+        function clearResultContainer() {
+            $('#result').empty();
+        }
+
+        function showOptions() {
+            clearResultContainer(); // Clear the result container when switching scripts
+            let script = $('#script-select').val();
+            let optionsHtml = '';
+            let runScriptHtml = '';
+
+            if (script === 'zip_converter') {
+                optionsHtml += `
+                    <div class="form-group">
+                        <label for="directory">Enter Directory Path:</label>
+                        <input type="text" id="directory" name="directory" class="form-control" required>
+                    </div>
+                    <button type="button" class="btn btn-secondary mb-4" onclick="listItems()">List Items</button>`;
+            } else if (script === 'data_profiling') {
+                optionsHtml += `
+                    <div class="form-group">
+                        <label for="file">Select a CSV or Excel File (.csv, .xlsx, .xls):</label>
+                        <input type="file" id="file" name="file" class="form-control" required>
+                        <small class="form-text text-muted">Supported file types: .csv, .xlsx, .xls</small>
+                    </div>`;
+                runScriptHtml = `<button type="submit" class="btn btn-primary">Run Script</button>`;
+            } else if (script === 'reporting') {
+                optionsHtml += `
+                    <div class="form-group">
+                        <label for="file">Select a CSV or Excel File (.csv, .xlsx, .xls):</label>
+                        <input type="file" id="file" name="file" class="form-control" required>
+                        <small class="form-text text-muted">Supported file types: .csv, .xlsx, .xls</small>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="processFile()">Continue</button>
+                    <div id="selection-placeholder" class="mt-4">
+                        <div class="form-group">
+                            <label for="selected_values_column1">Select Values from Column 1:</label>
+                            <select id="selected_values_column1" name="selected_values_column1" class="form-control" multiple>
+                                <!-- Options will be populated here -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="selected_values_column2">Select Values from Column 2:</label>
+                            <select id="selected_values_column2" name="selected_values_column2" class="form-control" multiple>
+                                <!-- Options will be populated here -->
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="runCustomScript()">Run Custom Script</button>
+                    </div>`;
+            } else if (script === 'file_renaming_ordering') {
+                optionsHtml += `
+                    <div class="form-group">
+                        <label for="directory">Enter Folder Location:</label>
+                        <input type="text" id="directory" name="directory" class="form-control" required>
+                    </div>
+                    <button type="button" class="btn btn-secondary mb-4" onclick="listFiles()">List Files</button>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="file-list">Files in Directory:</label>
+                            <select id="file-list" name="file-list" class="form-control" size="10"></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="ordered-file-list">Ordered Files:</label>
+                            <ul id="ordered-file-list" class="list-group"></ul>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary mt-2" onclick="addFile()">Add Selected File</button>
+                    <button type="button" class="btn btn-danger mt-2" onclick="resetOrderedFiles()">Reset</button>
+                    <div class="form-group mt-2">
+                        <label for="prefix">Prefix:</label>
+                        <input type="text" id="prefix" name="prefix" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="number-files">Number Files:</label>
+                        <input type="checkbox" id="number-files" name="number-files">
+                    </div>
+                    <button type="button" class="btn btn-info mt-2" onclick="previewFiles()">Preview</button>
+                    <button type="button" class="btn btn-success mt-2" onclick="renameFiles()">Rename Files</button>`;
+            }
+
+            $('#script-options').html(optionsHtml);
+            $('#run-script-container').html(runScriptHtml);
+        }
+
+        function listItems() {
+            let directory = $('#directory').val();
+            $.ajax({
+                type: 'POST',
+                url: '/list_items',
+                data: { directory: directory },
+                success: function(response) {
+                    let resultContainer = $('#result');
+                    resultContainer.empty();
+
+                    if (response.error) {
+                        resultContainer.append('<div class="alert alert-danger">' + response.error + '</div>');
+                    } else {
+                        let itemsTable = `
+                            <h2 class="mt-4">Items in Directory</h2>
+                            <form id="zip-form">
+                                <input type="hidden" name="directory" value="${directory}">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Select</th>
+                                            <th>Item Name</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
+                        response.forEach(function(item) {
+                            itemsTable += `
+                                <tr>
+                                    <td><input type="checkbox" name="items" value="${item}"></td>
+                                    <td>${item}</td>
+                                </tr>`;
+                        });
+                        itemsTable += `
+                                    </tbody>
+                                </table>
+                                <button type="button" class="btn btn-success" onclick="zipItems()">Zip Selected Items</button>
+                            </form>`;
+                        resultContainer.append(itemsTable);
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error("AJAX call failed:", textStatus, errorThrown);
+                    $('#result').html('<div class="alert alert-danger">Error listing items: ' + textStatus + '</div>');
+                }
+            });
+        }
+
+        function zipItems() {
+            let form = $('#zip-form')[0];
+            let formData = new FormData(form);
+            $.ajax({
+                type: 'POST',
+                url: '/zip_items',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.error) {
+                        $('#result').html('<div class="alert alert-danger">' + response.error + '</div>');
+                    } else {
+                        let downloadLinks = response.zipped_files.map(function(zip_path) {
+                            return '<a href="/download_zip?zip_path=' + encodeURIComponent(zip_path) + '">' + zip_path + '</a>';
+                        }).join('<br>');
+                        $('#result').html('<div class="alert alert-info">' + downloadLinks + '</div>');
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error("AJAX call failed:", textStatus, errorThrown);
+                    $('#result').html('<div class="alert alert-danger">Error zipping items: ' + textStatus + '</div>');
+                }
+            });
+        }
+
+        function processFile() {
+            console.log("processFile function called");  // Log function call
+            let form = $('#script-form')[0];
+            let formData = new FormData(form);
+            $.ajax({
+                type: 'POST',
+                url: '/process_file',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    console.log("Server response:", response);  // Log the response to the console for debugging
+
+                    if (response.error) {
+                        $('#result').html('<div class="alert alert-danger">' + response.error + '</div>');
+                    } else {
+                        let selectColumn1 = $('#selected_values_column1');
+                        let selectColumn2 = $('#selected_values_column2');
+                        
+                        selectColumn1.empty();
+                        selectColumn2.empty();
+                        
+                        response.unique_values_column1.forEach(value => {
+                            selectColumn1.append(new Option(value, value));
+                        });
+
+                        response.unique_values_column2.forEach(value => {
+                            selectColumn2.append(new Option(value, value));
+                        });
+
+                        console.log("Column 1 options updated:", selectColumn1.children());
+                        console.log("Column 2 options updated:", selectColumn2.children());
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error("AJAX call failed:", textStatus, errorThrown);
+                    $('#result').html('<div class="alert alert-danger">Error processing file: ' + textStatus + '</div>');
+                }
+            });
+        }
+
+        function listFiles() {
+            let directory = $('#directory').val();
+            $.ajax({
+                type: 'POST',
+                url: '/list_files',
+                data: { directory: directory },
+                success: function(response) {
+                    if (response.error) {
+                        $('#result').html('<div class="alert alert-danger">' + response.error + '</div>');
+                    } else {
+                        let fileList = $('#file-list');
+                        fileList.empty();
+                        response.forEach(function(file) {
+                            fileList.append(new Option(file, file));
+                        });
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error("AJAX call failed:", textStatus, errorThrown);
+                    $('#result').html('<div class="alert alert-danger">Error listing files: ' + textStatus + '</div>');
+                }
+            });
+        }
+
+        function addFile() {
+            let selectedFile = $('#file-list').val();
+            if (!selectedFile) return;
+
+            let orderedFileList = $('#ordered-file-list');
+            let file = selectedFile;
+            if (!$(`#ordered-file-list li[data-value='${file}']`).length) {
+                orderedFileList.append(`<li class="list-group-item" data-value="${file}">${file}</li>`);
+            }
+        }
+
+        function resetOrderedFiles() {
+            $('#ordered-file-list').empty();
+        }
+
+        function previewFiles() {
+            let orderedFiles = [];
+            let fileMappings = {};
+            $('#ordered-file-list li').each(function() {
+                orderedFiles.push($(this).data('value'));
+            });
+
+            let prefix = $('#prefix').val();
+            let numberFiles = $('#number-files').is(':checked');
+
+            $('#ordered-file-list').empty();
+            orderedFiles.forEach(function(file, index) {
+                let newName = `${prefix}${file}`;
+                if (numberFiles) {
+                    newName = `${prefix}${index + 1}_${file}`;
+                }
+                $('#ordered-file-list').append(`<li class="list-group-item" data-value="${file}">${newName}</li>`);
+                fileMappings[file] = newName;
+            });
+
+            console.log("File mappings:", fileMappings);  // Log file mappings to the console for debugging
+        }
+
+        function renameFiles() {
+            let orderedFiles = [];
+            let fileMappings = {};
+            $('#ordered-file-list li').each(function() {
+                let originalName = $(this).data('value');
+                let newName = $(this).text();
+                fileMappings[originalName] = newName;
+            });
+
+            let directory = $('#directory').val();
+
+            $.ajax({
+                type: 'POST',
+                url: '/rename_files',
+                data: JSON.stringify({ 
+                    directory: directory,
+                    file_mappings: fileMappings
+                }),
+                contentType: 'application/json',
+                success: function(response) {
+                    $('#result').html('<div class="alert alert-success">' + response.message + '</div>');
+                    console.log("Renamed files:", response.renamed_files);  // Log renamed files to the console for debugging
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error("AJAX call failed:", textStatus, errorThrown);
+                    $('#result').html('<div class="alert alert-danger">Error renaming files: ' + textStatus + '</div>');
+                }
+            });
+        }
+
+        $('#script-form').submit(function(event) {
+            event.preventDefault();
+            let script = $('#script-select').val();
+            if (script === 'data_profiling') {
+                let form = $('#script-form')[0];
+                let formData = new FormData(form);
+                $.ajax({
+                    type: 'POST',
+                    url: '/data_profiling',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        let resultContainer = $('#result');
+                        resultContainer.empty();
+                        
+                        if (response.error) {
+                            resultContainer.append('<div class="alert alert-danger">' + response.error + '</div>');
+                        } else {
+                            let profilingTable = `
+                                <h2 class="mt-4">Data Profiling Results</h2>
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Column Name</th>
+                                            <th>Fill Percentage</th>
+                                            <th>Unique Count</th>
+                                            <th>Data Type</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>`;
+                            for (let i = 0; i < response.columns.length; i++) {
+                                profilingTable += `
+                                    <tr>
+                                        <td>${response.columns[i]}</td>
+                                        <td>${(response.fill_percentages[i] * 100).toFixed(2)}%</td>
+                                        <td>${response.unique_counts[i]}</td>
+                                        <td>${response.data_types[i]}</td>
+                                    </tr>`;
+                            }
+                            profilingTable += `
+                                    </tbody>
+                                </table>`;
+                            resultContainer.append(profilingTable);
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        console.error("AJAX call failed:", textStatus, errorThrown);
+                        $('#result').html('<div class="alert alert-danger">Error running data profiling: ' + textStatus + '</div>');
+                    }
+                });
+            } else if (script === 'reporting') {
+                processFile();
+            } else {
+                $.ajax({
+                    type: 'POST',
+                    url: '/run_script',
+                    data: $('#script-form').serialize(),
+                    success: function(response) {
+                        let resultContainer = $('#result');
+                        resultContainer.empty();
+
+                        if (response.error) {
+                            resultContainer.append('<div class="alert alert-danger">' + response.error + '</div>');
+                        } else {
+                            resultContainer.append('<pre>' + JSON.stringify(response, null, 4) + '</pre>');
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        console.error("AJAX call failed:", textStatus, errorThrown);
+                        $('#result').html('<div class="alert alert-danger">Error running script: ' + textStatus + '</div>');
+                    }
+                });
+            }
+        });
+
+        function runCustomScript() {
+            let form = $('#script-form')[0];
+            let formData = new FormData(form);
+            $.ajax({
+                type: 'POST',
+                url: '/run_custom_script',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    let resultContainer = $('#result');
+                    resultContainer.append('<div class="alert alert-success mt-4">' + response.message + '</div>');
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error("AJAX call failed:", textStatus, errorThrown);
+                    $('#result').html('<div class="alert alert-danger">Error running custom script: ' + textStatus + '</div>');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
